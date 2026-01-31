@@ -168,7 +168,7 @@ STATUS "ok" if:
 - Image is suitable as-is for profile picture use
 - No cropping needed
 
-Be practical - minor text or watermarks that don't dominate the image are fine."""
+Be practical - minor text or watermarks that don't dominate the image are fine. It's also the internet so images on the "lewder" side or on the edge should be marked as okay, only things visibly pornographic should be classified as such."""
 
         user_content = [
             {
@@ -187,7 +187,7 @@ Be practical - minor text or watermarks that don't dominate the image are fine."
         
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=300,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}]
