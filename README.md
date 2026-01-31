@@ -5,9 +5,10 @@ A system for collecting images from your bookmarks/favorites across Twitter, Red
 ## How it works
 
 1. **Scrape** images from your saved/bookmarked content across platforms
-2. **Tournament** bracket where Claude compares pairs of images and picks favorites
-3. **Winner** emerges after log₂(n) rounds of single-elimination
-4. **Credit info** is saved so you can properly attribute the artist
+2. **Preprocess** images: detect caption-style layouts and crop them, filter NSFW content
+3. **Tournament** bracket where Claude compares pairs of images and picks favorites
+4. **Winner** emerges after log₂(n) rounds of single-elimination
+5. **Credit info** is saved so you can properly attribute the artist
 
 ## Setup
 
@@ -67,7 +68,10 @@ python main.py scrape all
 ### Running the tournament
 
 ```bash
-# Start or resume tournament
+# First, preprocess images (screens for NSFW, crops caption-style images)
+python main.py preprocess
+
+# Then run the tournament on processed images
 python main.py tournament
 
 # Start fresh (clear previous progress)
@@ -75,7 +79,19 @@ python main.py tournament --reset
 
 # Adjust batch size (matches per save)
 python main.py tournament --batch-size 20
+
+# Run tournament on original images (skip preprocessing)
+python main.py tournament --images-dir ./images
 ```
+
+### Preprocessing details
+
+The preprocess step uses Claude to assess each image:
+- **Caption detection**: Images with "caption" layouts (art + text side by side) get auto-cropped to just the art portion
+- **NSFW filtering**: Explicit content is flagged and excluded from the tournament
+- **Quality check**: Very low quality or text-only images are filtered out
+
+Results are saved incrementally, so you can stop and resume. Processed images go to `./images_processed/`.
 
 ### Check status
 
@@ -101,10 +117,12 @@ The winner ends up in `./winner/` with:
 
 ## Estimated costs
 
-Using Claude Sonnet for judging:
-- ~2000 images = ~2000 matches
-- Each match sends 2 images (~500KB average each)
-- Rough estimate: ~$10-20 in API costs for a full tournament
+Using Claude Sonnet for preprocessing and judging:
+- Preprocessing: ~1 API call per image (screens & determines crops)
+- Tournament: ~N matches where N = number of approved images
+- ~2000 images = ~2000 preprocess calls + ~2000 tournament matches
+- Each call sends 1-2 images (~500KB average each)
+- Rough estimate: ~$15-30 in API costs for a full run
 
 ## Project structure
 
@@ -118,15 +136,18 @@ aquaedc-pfp-tournament/
 │   ├── reddit_scraper.py   # Reddit saved posts
 │   └── deviantart_scraper.py
 ├── tournament/
+│   ├── preprocess.py       # Image screening & cropping
 │   └── bracket.py          # Tournament logic
 ├── images/                  # Downloaded images go here
 │   ├── twitter/
 │   ├── reddit/
 │   └── deviantart/
+├── images_processed/        # Screened & cropped images
 ├── data/                    # Metadata and state
 │   ├── twitter_metadata.json
 │   ├── reddit_metadata.json
 │   ├── deviantart_metadata.json
+│   ├── preprocess_state.json
 │   └── tournament_state.json
 └── winner/                  # Final output
     ├── winner_*.jpg
