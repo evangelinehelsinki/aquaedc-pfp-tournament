@@ -16,6 +16,10 @@ images/reddit/*
 images/deviantart/*
 !images/*/.gitkeep
 
+# Processed images
+images_processed/*
+!images_processed/.gitkeep
+
 # Tournament state and metadata
 data/*.json
 
