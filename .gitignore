@@ -1,0 +1,36 @@
+# Environment
+.env
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+
+# Downloaded content (don't commit scraped images)
+images/twitter/*
+images/reddit/*
+images/deviantart/*
+!images/*/.gitkeep
+
+# Tournament state and metadata
+data/*.json
+
+# Output
+winner/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Twitter archive (in case someone extracts it here)
+twitter-archive/
