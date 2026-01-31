@@ -23,6 +23,9 @@ Commands:
   scrape deviantart  Scrape DeviantArt favorites for images
   scrape all         Run all scrapers
   
+  preprocess         Screen images: crop captions, filter NSFW
+  preprocess --reset Re-assess all images from scratch
+  
   tournament         Run the selection tournament
   tournament --reset Start tournament fresh (clears progress)
   
@@ -31,7 +34,8 @@ Commands:
 Setup:
   1. Copy .env.example to .env and fill in credentials
   2. Run scrapers to collect images
-  3. Run tournament to select a winner
+  3. Run preprocess to screen and crop images
+  4. Run tournament to select a winner
 
 Example:
   python main.py scrape reddit
@@ -94,6 +98,11 @@ Example:
         else:
             print(f"Unknown scraper: {subcommand}")
             print("Available: twitter, reddit, deviantart, all")
+    
+    elif command == 'preprocess':
+        from tournament.preprocess import main as preprocess_main
+        sys.argv = ['preprocess'] + ([subcommand] if subcommand else []) + extra_args
+        preprocess_main()
     
     elif command == 'tournament':
         from tournament.bracket import main as tournament_main
