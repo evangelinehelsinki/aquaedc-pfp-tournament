@@ -1,0 +1,15 @@
+# Scrapers
+praw>=7.7.0           # Reddit API
+requests>=2.31.0      # HTTP requests
+playwright>=1.40.0    # Browser automation for Twitter/DeviantArt
+aiohttp>=3.9.0        # Async HTTP for bulk downloads
+aiofiles>=23.2.0      # Async file operations
+
+# Tournament
+anthropic>=0.39.0     # Claude API for image selection
+rich>=13.7.0          # Pretty terminal output
+Pillow>=10.0.0        # Image validation/processing
+
+# Utils
+python-dotenv>=1.0.0  # Environment variables
+tqdm>=4.66.0          # Progress bars
