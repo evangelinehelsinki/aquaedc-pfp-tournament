@@ -518,8 +518,8 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Run image selection tournament')
-    parser.add_argument('--images-dir', type=Path, default=Path(__file__).parent.parent / 'images',
-                       help='Directory containing images to choose from')
+    parser.add_argument('--images-dir', type=Path, default=Path(__file__).parent.parent / 'images_processed',
+                       help='Directory containing images to choose from (default: images_processed)')
     parser.add_argument('--batch-size', type=int, default=10,
                        help='Number of matches to run per batch (default: 10)')
     parser.add_argument('--reset', action='store_true',
