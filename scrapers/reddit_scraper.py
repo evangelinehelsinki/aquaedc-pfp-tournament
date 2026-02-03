@@ -82,73 +82,109 @@ def parse_reddit_archive(archive_path: Path) -> list[dict]:
     """
     Parse Reddit data export for saved posts with images.
     
-    Reddit exports saved posts in a CSV file, typically at:
-    - saved_posts.csv
-    - or inside a subdirectory
+    Reddit exports saved posts in a CSV file with just id and permalink.
+    We need to fetch each post to get image URLs.
     """
     archive_path = Path(archive_path)
     
-    # Find the saved posts file
-    possible_files = [
-        archive_path / 'saved_posts.csv',
-        archive_path / 'saved_comments.csv',  # Sometimes images are in comments too
-    ]
+    # Find saved_posts.csv (prioritize over saved_comments.csv)
+    saved_posts_file = archive_path / 'saved_posts.csv'
     
-    # Also search recursively
-    for csv_file in archive_path.rglob('*.csv'):
-        if 'saved' in csv_file.name.lower():
-            possible_files.insert(0, csv_file)
+    if not saved_posts_file.exists():
+        # Search for it
+        for csv_file in archive_path.rglob('*.csv'):
+            if csv_file.name == 'saved_posts.csv':
+                saved_posts_file = csv_file
+                break
     
-    saved_posts_file = None
-    for f in possible_files:
-        if f.exists():
-            saved_posts_file = f
-            break
-    
-    if not saved_posts_file:
-        # List what's in the archive to help debug
-        contents = list(archive_path.rglob('*'))[:20]
+    if not saved_posts_file.exists():
+        contents = list(archive_path.glob('*.csv'))[:10]
         raise FileNotFoundError(
             f"Could not find saved_posts.csv in {archive_path}\n"
-            f"Found files: {[str(c.relative_to(archive_path)) for c in contents]}\n"
-            "Make sure you've extracted the Reddit data export."
+            f"Found CSV files: {[c.name for c in contents]}\n"
         )
     
     print(f"📂 Parsing {saved_posts_file}")
     
-    images = []
+    posts = []
     
     with open(saved_posts_file, 'r', encoding='utf-8') as f:
-        # Try to detect the CSV format
-        sample = f.read(2048)
-        f.seek(0)
-        
-        # Reddit exports can have different delimiters
-        dialect = csv.Sniffer().sniff(sample, delimiters=',\t')
-        reader = csv.DictReader(f, dialect=dialect)
-        
+        reader = csv.DictReader(f)
         for row in reader:
-            # Reddit CSV typically has 'url' or 'permalink' columns
-            url = row.get('url', row.get('URL', row.get('permalink', '')))
-            post_id = row.get('id', row.get('ID', ''))
-            subreddit = row.get('subreddit', row.get('Subreddit', ''))
-            title = row.get('title', row.get('Title', ''))
-            
-            if not url:
-                continue
-            
-            # Check if it's an image URL
-            image_url = extract_image_url_from_url(url)
-            
-            if image_url:
-                images.append({
-                    'url': image_url,
-                    'source': 'reddit',
-                    'source_url': f'https://reddit.com/r/{subreddit}/comments/{post_id}' if post_id else url,
-                    'title': title,
-                    'subreddit': subreddit,
-                    'scraped_at': datetime.utcnow().isoformat(),
+            post_id = row.get('id', '')
+            permalink = row.get('permalink', '')
+            if post_id and permalink:
+                posts.append({
+                    'id': post_id,
+                    'permalink': permalink,
                 })
+    
+    print(f"📋 Found {len(posts)} saved posts, fetching image URLs...")
+    
+    # Fetch each post to get image URLs
+    images = []
+    
+    for post in tqdm(posts, desc="Fetching posts"):
+        try:
+            # Use Reddit's JSON endpoint (no auth needed)
+            json_url = post['permalink'].rstrip('/') + '.json'
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            import requests
+            response = requests.get(json_url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Reddit returns [listing, comments] - we want the listing
+                if data and len(data) > 0:
+                    post_data = data[0].get('data', {}).get('children', [{}])[0].get('data', {})
+                    
+                    url = post_data.get('url', '')
+                    subreddit = post_data.get('subreddit', '')
+                    title = post_data.get('title', '')
+                    author = post_data.get('author', '')
+                    
+                    image_url = extract_image_url_from_url(url)
+                    
+                    # Also check for gallery
+                    if not image_url and post_data.get('is_gallery'):
+                        media_metadata = post_data.get('media_metadata', {})
+                        if media_metadata:
+                            first_item = list(media_metadata.values())[0]
+                            if 's' in first_item and 'u' in first_item['s']:
+                                image_url = first_item['s']['u'].replace('&amp;', '&')
+                    
+                    # Check preview images
+                    if not image_url:
+                        preview = post_data.get('preview', {})
+                        preview_images = preview.get('images', [])
+                        if preview_images:
+                            source = preview_images[0].get('source', {})
+                            if source.get('url'):
+                                image_url = source['url'].replace('&amp;', '&')
+                    
+                    if image_url:
+                        images.append({
+                            'url': image_url,
+                            'source': 'reddit',
+                            'source_url': post['permalink'],
+                            'title': title,
+                            'subreddit': subreddit,
+                            'author': author,
+                            'scraped_at': datetime.utcnow().isoformat(),
+                        })
+            
+            # Rate limiting
+            import time
+            time.sleep(0.5)
+            
+        except Exception as e:
+            # Skip failed posts
+            continue
     
     return images
 
