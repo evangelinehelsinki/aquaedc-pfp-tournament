@@ -1,5 +1,5 @@
 # Scrapers
-praw>=7.7.0           # Reddit API
+praw>=7.7.0           # Reddit API (optional - can use archive method instead)
 requests>=2.31.0      # HTTP requests
 playwright>=1.40.0    # Browser automation for Twitter/DeviantArt
 aiohttp>=3.9.0        # Async HTTP for bulk downloads
