@@ -56,6 +56,7 @@ Example:
         
         elif subcommand == 'reddit':
             from scrapers.reddit_scraper import main as reddit_main
+            sys.argv = ['reddit_scraper'] + extra_args
             reddit_main()
         
         elif subcommand == 'deviantart':
