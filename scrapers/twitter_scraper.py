@@ -33,62 +33,104 @@ IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 
 def parse_twitter_archive(archive_path: Path) -> list[dict]:
     """
-    Parse Twitter data archive for bookmarked images.
+    Parse Twitter data archive for bookmarked/liked images.
     
     Expected structure:
     archive/
     └── data/
-        └── bookmarks.js
+        ├── bookmarks.js (preferred)
+        └── like.js (fallback)
     """
-    bookmarks_file = archive_path / 'data' / 'bookmarks.js'
+    data_dir = archive_path / 'data'
     
-    if not bookmarks_file.exists():
-        # Try alternate location
-        bookmarks_file = archive_path / 'data' / 'bookmark.js'
-    
-    if not bookmarks_file.exists():
+    if not data_dir.exists():
         raise FileNotFoundError(
-            f"Could not find bookmarks.js in {archive_path}\n"
-            "Make sure you've extracted your Twitter archive and provided the correct path."
+            f"Could not find data/ directory in {archive_path}\n"
+            "Make sure you've extracted your Twitter archive."
         )
     
-    # Twitter archive JS files start with "window.YTD.bookmarks.part0 = "
-    content = bookmarks_file.read_text(encoding='utf-8')
+    # Try bookmarks first, then likes
+    bookmarks_file = data_dir / 'bookmarks.js'
+    likes_file = data_dir / 'like.js'
+    
+    source_file = None
+    source_type = None
+    
+    if bookmarks_file.exists():
+        source_file = bookmarks_file
+        source_type = 'bookmarks'
+    elif likes_file.exists():
+        source_file = likes_file
+        source_type = 'likes'
+        print("⚠️  No bookmarks.js found, using like.js instead")
+    else:
+        # List available files to help debug
+        js_files = list(data_dir.glob('*.js'))[:15]
+        raise FileNotFoundError(
+            f"Could not find bookmarks.js or like.js in {data_dir}\n"
+            f"Available .js files: {[f.name for f in js_files]}\n"
+            "Twitter may not include bookmarks in data exports. "
+            "You may need to use browser automation instead."
+        )
+    
+    print(f"📂 Parsing {source_type} from {source_file.name}")
+    
+    # Twitter archive JS files start with "window.YTD.{name}.part0 = "
+    content = source_file.read_text(encoding='utf-8')
     
     # Extract JSON part
     json_match = re.search(r'=\s*(\[.*\])', content, re.DOTALL)
     if not json_match:
-        raise ValueError("Could not parse bookmarks.js - unexpected format")
+        raise ValueError(f"Could not parse {source_file.name} - unexpected format")
     
-    bookmarks_data = json.loads(json_match.group(1))
+    data = json.loads(json_match.group(1))
     
     images = []
     
-    for bookmark in bookmarks_data:
-        tweet = bookmark.get('bookmark', {}).get('tweet', {})
+    for item in data:
+        # Handle different structures for bookmarks vs likes
+        if source_type == 'bookmarks':
+            tweet = item.get('bookmark', {}).get('tweet', {})
+        else:
+            # likes have a different structure
+            tweet = item.get('like', {})
+            # likes store less data - try to extract what we can
+            tweet_id = tweet.get('tweetId', '')
+            expanded_url = tweet.get('expandedUrl', '')
+            
+            # For likes, we may need to check if there's media info
+            # Unfortunately likes don't include media URLs directly
+            # We'll try to work with what we have
+        
         if not tweet:
             continue
         
         tweet_id = tweet.get('tweetId', tweet.get('id_str', ''))
+        
+        # Try to get user info (structure varies)
+        username = 'unknown'
         user = tweet.get('core', {}).get('user_results', {}).get('result', {}).get('legacy', {})
-        username = user.get('screen_name', 'unknown')
+        if user:
+            username = user.get('screen_name', 'unknown')
         
-        # Check for media
+        # Check for media in various locations
+        media_list = []
+        
+        # Extended entities (most complete)
         extended_entities = tweet.get('extended_entities', {})
-        media_list = extended_entities.get('media', [])
+        media_list.extend(extended_entities.get('media', []))
         
-        # Also check legacy location
+        # Regular entities
+        entities = tweet.get('entities', {})
         if not media_list:
-            media_list = tweet.get('entities', {}).get('media', [])
+            media_list.extend(entities.get('media', []))
         
         for media in media_list:
             media_type = media.get('type', '')
             
             if media_type == 'photo':
-                # Get highest quality version
                 media_url = media.get('media_url_https', media.get('media_url', ''))
                 if media_url:
-                    # Request large size
                     if '?' not in media_url:
                         media_url = f"{media_url}?format=jpg&name=large"
                     
@@ -98,11 +140,11 @@ def parse_twitter_archive(archive_path: Path) -> list[dict]:
                         'source_url': f'https://twitter.com/{username}/status/{tweet_id}',
                         'author': username,
                         'tweet_id': tweet_id,
+                        'from_likes': source_type == 'likes',
                         'scraped_at': datetime.utcnow().isoformat(),
                     })
             
             elif media_type == 'animated_gif':
-                # GIFs are stored as videos, get thumbnail
                 thumb_url = media.get('media_url_https', '')
                 if thumb_url:
                     images.append({
@@ -112,6 +154,7 @@ def parse_twitter_archive(archive_path: Path) -> list[dict]:
                         'author': username,
                         'tweet_id': tweet_id,
                         'is_gif_thumb': True,
+                        'from_likes': source_type == 'likes',
                         'scraped_at': datetime.utcnow().isoformat(),
                     })
     
